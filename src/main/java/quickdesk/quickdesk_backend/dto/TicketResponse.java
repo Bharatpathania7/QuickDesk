@@ -101,6 +101,25 @@ public class TicketResponse {
 
     private String createdBy;
     private String assignedTo;
+    private long upvotes;
+
+    public long getUpvotes() {
+        return upvotes;
+    }
+
+    public void setUpvotes(long upvotes) {
+        this.upvotes = upvotes;
+    }
+
+    public long getDownvotes() {
+        return downvotes;
+    }
+
+    public void setDownvotes(long downvotes) {
+        this.downvotes = downvotes;
+    }
+
+    private long downvotes;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

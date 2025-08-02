@@ -15,17 +15,20 @@ public class TicketService {
     private final TicketRepository ticketRepository;
     private final UserRepository userRepository;
     private final TicketCommentRepository commentRepository;
+    private final TicketVoteRepository voteRepository;
     private final EmailService emailService;
 
     public TicketService(
             TicketRepository ticketRepository,
             UserRepository userRepository,
             TicketCommentRepository commentRepository,
+            TicketVoteRepository voteRepository,
             EmailService emailService
     ) {
         this.ticketRepository = ticketRepository;
         this.userRepository = userRepository;
         this.commentRepository = commentRepository;
+        this.voteRepository = voteRepository;
         this.emailService = emailService;
     }
 
@@ -50,7 +53,6 @@ public class TicketService {
                 "Ticket Created - QuickDesk",
                 "Hi " + user.getName() + ",\n\nYour ticket \"" + ticket.getSubject() + "\" has been created successfully.\n\nStatus: OPEN\n\nThank you,\nQuickDesk Support"
         );
-
 
         return mapToResponse(ticket);
     }
@@ -97,6 +99,22 @@ public class TicketService {
         return tickets.stream().map(this::mapToResponse).collect(Collectors.toList());
     }
 
+    // SORT BY COMMENT COUNT
+    public List<TicketResponse> getTicketsSortedByCommentCount() {
+        return ticketRepository.findAll().stream()
+                .sorted((a, b) -> Integer.compare(b.getComments().size(), a.getComments().size()))
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    // SORT BY RECENTLY MODIFIED
+    public List<TicketResponse> getTicketsSortedByUpdatedAt() {
+        return ticketRepository.findAll().stream()
+                .sorted((a, b) -> b.getUpdatedAt().compareTo(a.getUpdatedAt()))
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
     // UPDATE STATUS
     public TicketResponse updateStatus(UpdateTicketStatusRequest request) {
         Ticket ticket = ticketRepository.findById(request.getTicketId())
@@ -127,6 +145,49 @@ public class TicketService {
         ticket.setUpdatedAt(LocalDateTime.now());
 
         return mapToResponse(ticketRepository.save(ticket));
+    }
+    // UPVOTE a ticket
+    public void upvoteTicket(Long ticketId, String userEmail) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Optional<TicketVote> existingVote = voteRepository.findByTicketAndUser(ticket, user);
+        if (existingVote.isPresent()) {
+            TicketVote vote = existingVote.get();
+            vote.setUpvote(true);
+            voteRepository.save(vote);
+        } else {
+            TicketVote vote = new TicketVote();
+            vote.setTicket(ticket);
+            vote.setUser(user);
+            vote.setUpvote(true);
+            voteRepository.save(vote);
+        }
+    }
+
+    // DOWNVOTE a ticket
+    public void downvoteTicket(Long ticketId, String userEmail) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Optional<TicketVote> existingVote = voteRepository.findByTicketAndUser(ticket, user);
+        if (existingVote.isPresent()) {
+            TicketVote vote = existingVote.get();
+            vote.setUpvote(false);
+            voteRepository.save(vote);
+        } else {
+            TicketVote vote = new TicketVote();
+            vote.setTicket(ticket);
+            vote.setUser(user);
+            vote.setUpvote(false);
+            voteRepository.save(vote);
+        }
     }
 
     // ADD COMMENT
@@ -166,6 +227,12 @@ public class TicketService {
                 .collect(Collectors.toList());
 
         response.setComments(commentTexts);
+
+        Long upvotes = voteRepository.countByTicketIdAndUpvoteTrue(ticket.getId());
+        Long downvotes = voteRepository.countByTicketIdAndUpvoteFalse(ticket.getId());
+
+        response.setUpvotes(upvotes);
+        response.setDownvotes(downvotes);
 
         return response;
     }
